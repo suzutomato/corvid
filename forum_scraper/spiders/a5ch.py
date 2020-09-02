@@ -25,6 +25,7 @@ class A5chSpider(scrapy.spiders.Spider):
         '''Parse the forum list of BBS. Then request for each forum.'''
         target_forums = self.settings.get('TARGET_FORUMS')
         for url in response.css('font > b ~ a::attr(href)').getall():
+            # self.logger.debug(f'{forum_id_from_url(url)}, {target_forums}')
             if forum_id_from_url(url) in target_forums:
                 yield scrapy.Request(url, self.parse_forum)
 

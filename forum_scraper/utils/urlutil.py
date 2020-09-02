@@ -1,89 +1,129 @@
 # -*- coding: utf-8 -*-
+import json
+import logging
+import os
+from pathlib import Path
 import re
 from urllib.parse import urlparse
 
-FORUM_PATTERN = r'^https?://\w+\.(?:5ch\.net|2ch\.sc)/\w+/?$'
+from corvid.utils.urlutil import get_sld_from_url
 
-TOPIC_PATTERN_2CH = r'^/(?:test/read\.cgi/)?(?P<forum_id>\w+)/' + \
-                        r'(?:dat/)?(?P<topic_num>\d+)(?:\.dat)?/?(?:\D\d+)?$'
-TOPIC_PATTERN_5CH = r'^/test/read\.cgi/(?P<forum_id>\w+)/' + \
-                     r'(?P<topic_num>\d+)/?(?:\D\d+)?$'
+# Prepare logger
+logger = logging.getLogger(__file__)
 
-COMMENT_PATTERN = r'(?:\.\.)?/test/read\.cgi/(?P<forum_id>\w+)/' + \
-                  r'(?P<topic_num>\d+)/(?P<comment_num>\d+)/?'
+# Prepare domain dict with regex.
+base_dir = Path(os.environ['SCRAPER_CONFIG_DIR'])
+domains_json = base_dir / 'domains.json'
 
-DOMAIN_2CH = '2ch.sc'
-DOMAIN_5CH = '5ch.net'
+if not domains_json.exists():
+    raise FileNotFoundError(f'`domains.json` doesn\'t exist in {base_dir}')
 
-
-def forum_id_from_url(url: str) -> str:
-    if is_forum_url(url):
-        return urlparse(url).path.strip('/')
-    elif is_topic_url(url):
-        parsed = urlparse(url)
-        if DOMAIN_2CH in parsed.netloc:
-            m = re.match(TOPIC_PATTERN_2CH, parsed.path)
-        if DOMAIN_5CH in parsed.netloc:
-            m = re.match(TOPIC_PATTERN_5CH, parsed.path)
-        return m.group('forum_id')
-    elif is_comment_url(url):
-        return re.match(COMMENT_PATTERN, url).group('forum_id')
-
-    return None
-
-
-def topic_id_from_url(url: str) -> str:
-    if is_topic_url(url):
-        parsed = urlparse(url)
-        if DOMAIN_2CH in parsed.netloc:
-            m = re.search(TOPIC_PATTERN_2CH, parsed.path)
-        if DOMAIN_5CH in parsed.netloc:
-            m = re.search(TOPIC_PATTERN_5CH, parsed.path)
-    elif is_comment_url(url):
-        m = re.search(COMMENT_PATTERN, url)
-    else:
-        return None
-
-    return '_'.join([m.group('forum_id'), m.group('topic_num')])
-
-
-def comment_id_from_url(url: str) -> str:
-    if is_comment_url(url):
-        m = re.search(COMMENT_PATTERN, url)
-        comment_num = f'{int(m.group("comment_num")):0>4}'
-        return '_'.join([m.group('forum_id'), m.group('topic_num'),
-                        comment_num])
-    else:
-        return None
+with domains_json.open() as rh:
+    DOMAINS = json.load(rh)
 
 
 def is_forum_url(url: str) -> bool:
     if not isinstance(url, str):
         raise TypeError()
 
-    return re.match(FORUM_PATTERN, url) is not None
+    return parse_url(url, 'forum_pat')
 
 
 def is_topic_url(url: str) -> bool:
     if not isinstance(url, str):
         raise TypeError()
 
-    parsed = urlparse(url)
-    if DOMAIN_2CH in parsed.netloc:
-        return re.match(TOPIC_PATTERN_2CH, parsed.path) is not None
-    if DOMAIN_5CH in parsed.netloc:
-        return re.match(TOPIC_PATTERN_5CH, parsed.path) is not None
-    return False
+    return parse_url(url, 'topic_pat')
 
 
 def is_comment_url(url: str) -> bool:
     if not isinstance(url, str):
         raise TypeError
-    return re.match(COMMENT_PATTERN, url) is not None
+
+    # Is always a relative URL
+    for domain_info in DOMAINS:
+        m = re.match(domain_info['comment_pat'], url)
+        if m:
+            return m
+
+    return False
+
+
+def parse_url(url: str, key: str):
+    parsed = urlparse(url)
+
+    for domain_info in DOMAINS:
+        m = re.match(domain_info[key], parsed.path)
+        if domain_info['domain'] in parsed.netloc and m:
+            return m
+
+    return None
+
+
+def forum_id_from_url(url: str) -> str:
+
+    m_frm = is_forum_url(url)
+    m_tpc = is_topic_url(url)
+    m_cmt = is_comment_url(url)
+
+    if m_frm:
+        m = m_frm
+    elif m_tpc:
+        m = m_tpc
+    elif m_cmt:
+        m = m_cmt
+    else:
+        return None
+
+    sld = get_sld_from_url(url)
+    return '_'.join([sld, m.group('forum_id')])
+
+
+def topic_id_from_url(url: str) -> str:
+
+    m_tpc = is_topic_url(url)
+    m_cmt = is_comment_url(url)
+
+    if m_tpc:
+        m = m_tpc
+    elif m_cmt:
+        m = m_cmt
+    else:
+        return None
+
+    sld = get_sld_from_url(url)
+    return '_'.join([sld, m.group('forum_id'), m.group('topic_num')])
+
+
+def comment_id_from_url(url: str) -> str:
+
+    m = is_comment_url(url)
+
+    if not m:
+        return None
+
+    sld = get_sld_from_url(url)
+    return '_'.join([sld, m.group('forum_id'), m.group('topic_num'),
+                     f'{int(m.group("comment_num")):0>4}'])
 
 
 def extract_hostname(url: str) -> str:
-    '''Extract hostname (hostloc, to be precise) from url.
+    '''Extract hostname (hostloc, to be precise) from url. Used in loaders.
+
+    Parametes
+    ---------
+    url : str
+        URL to extract a host name (= netloc)from.
+
+    Raises
+    ------
+    TypeError
+        When `url` is not a `str`.
+
+    Returns
+    -------
+    str
+        a host name.
 
     Example
     -------

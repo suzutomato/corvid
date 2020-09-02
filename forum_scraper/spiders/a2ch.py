@@ -22,6 +22,8 @@ from ..utils.pipelines import DATETIME_PTTRN
 class A2chSpider(scrapy.spiders.Spider):
     name = '2ch'
     allowed_domains = ['2ch.sc']
+    row_tuple = namedtuple('Row', ['uname', 'mail', 'body',
+                                   'title', 'date', 'uid'])
 
     def start_requests(self):
         bbs_table = 'http://2ch.sc/bbstable.html'
@@ -29,15 +31,18 @@ class A2chSpider(scrapy.spiders.Spider):
 
     def parse_forum_list(self, response):
         '''Parse the forum list of BBS. Then request for each forum.'''
-        target_forums = ['livejupiter', 'news', 'news4vip', 'newsplus']
+
         for url in response.css('b ~ a::attr(href)').getall():
+            # Only scrape the forums in TARGET_FORUMS
+            target_forums = self.settings.get('TARGET_FORUMS')
             if forum_id_from_url(url) in target_forums:
                 yield scrapy.Request(url, self.parse_forum)
 
     def parse_forum(self, response):
-        '''Parse a single forum of the BBS, extract metadata.
-        Request for the archive list of the forum, call self.parse_archives.'''
+        '''Scrape metadata from a single forum, then follow to active and
+        arichived topic lists.'''
 
+        # Prepare the item loader
         bl = ForumLoader(item=ForumItem(), response=response)
         # Basic identity
         bl.add_value('site', '2ch')
@@ -46,17 +51,18 @@ class A2chSpider(scrapy.spiders.Spider):
         bl.add_css('forum_name', 'title::text')
         # Foreign keys
         bl.add_value('hostname', response.url)
+
         item = bl.load_item()
         yield item
 
-        # Scrape active topics
+        # Follow URL to the active topic lists
         actv_kwargs = {'forum_id': item['forum_id'],
                        'forum_url': item['forum_url'],
                        'thd_item_cls': ActiveTopicItem}
         yield response.follow('subback.html', self.parse_active_list,
                               cb_kwargs=actv_kwargs)
 
-        # Scrape archived topics
+        # Follow URL to the archived topic lists
         arch_kwargs = {'forum_id': item['forum_id'],
                        'forum_url': item['forum_url'],
                        'thd_item_cls': ArchivedTopicItem}
@@ -65,6 +71,7 @@ class A2chSpider(scrapy.spiders.Spider):
 
     def parse_active_list(self, response, **kwargs):
         '''Parse URLs for active topics.'''
+
         for topic_url in response.css('.trad > a::attr(href)'):
             m = re.match(r'\d+', topic_url.get())
             if m is not None:
@@ -75,6 +82,8 @@ class A2chSpider(scrapy.spiders.Spider):
     def parse_archive_list(self, response, **kwargs):
         '''Parse URLs for active topics.'''
         xpath_selector = '//a[text()="subject.txt"]/@href'
+        # Create a list of absolute URLs so that we can safely open when we
+        # can't use `request.follow`
         txt_urls = [urljoin(response.url, u)
                     for u in response.xpath(xpath_selector).getall()[::-1]
                     if u]
@@ -87,8 +96,8 @@ class A2chSpider(scrapy.spiders.Spider):
         kwargs['count'] = 0 if 'count' not in kwargs else kwargs['count']
 
         for row in body:
-            fname = row.split('<>')[0]  # r'\d+\.dat'
-            kwargs['topic_num'] = fname.split('.')[0]  # r'\d+'
+            fname = row.split('<>')[0]  # file name pattern is r'\d+\.dat'
+            kwargs['topic_num'] = fname.split('.')[0]  # pattern is r'\d+'
             yield scrapy.Request(urljoin(kwargs["forum_url"], 'dat/') + fname,
                                  self.parse_topic, cb_kwargs=kwargs)
 
@@ -97,7 +106,8 @@ class A2chSpider(scrapy.spiders.Spider):
                 break
 
         if kwargs['count'] < 1000 and len(kwargs['txt_urls']) > 0:
-            next_url = kwargs['txt_urls'][-1]   # note it's cast to a tuple
+            # a list in kwargs is casted to a tuple, so can't use `.pop()`
+            next_url = kwargs['txt_urls'][-1]
             kwargs['txt_urls'] = kwargs['txt_urls'][:-1]
             yield scrapy.Request(next_url, self.parse_dat_list,
                                  cb_kwargs=kwargs)
@@ -166,8 +176,6 @@ class A2chSpider(scrapy.spiders.Spider):
     def _decompose_row(self, row):
         if not isinstance(row, str):
             raise TypeError
-        row_tuple = namedtuple('Row', ['uname', 'mail', 'body',
-                                       'title', 'date', 'uid'])
         data = row.split('<>')
         date_uid = data.pop(2)
         m = re.match(DATETIME_PTTRN, date_uid)
@@ -177,6 +185,6 @@ class A2chSpider(scrapy.spiders.Spider):
         data = [seg.strip() if isinstance(seg, str) else ''
                 for seg in data + [date, uid]]
         try:
-            return row_tuple(*data)
+            return self.row_tuple(*data)
         except Exception as e:
             raise Exception(e, data + [date_uid])

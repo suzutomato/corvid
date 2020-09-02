@@ -11,6 +11,7 @@ from itemadapter import ItemAdapter
 LIST_OF_TUPLES = List[Tuple[Hashable, Any]]
 FIELDS = Union[Hashable, List[Union[Hashable, Tuple[Hashable, Any]]]]
 
+# Regex pattern to extract datetime from comments
 DATETIME_PTTRN = \
     r'(?P<date>\d{2,4}/\d{2}/\d{2})\D+(?P<time>\d{2}:\d{2}(:\d{2})?)'
 
