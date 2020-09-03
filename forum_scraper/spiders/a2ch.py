@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from collections import namedtuple
+import json
 import re
 
 import scrapy
@@ -21,12 +22,22 @@ from ..utils.pipelines import DATETIME_PTTRN
 
 class A2chSpider(scrapy.spiders.Spider):
     name = '2ch'
-    allowed_domains = ['2ch.sc']
     row_tuple = namedtuple('Row', ['uname', 'mail', 'body',
                                    'title', 'date', 'uid'])
 
     def start_requests(self):
-        bbs_table = 'http://2ch.sc/bbstable.html'
+        with open(self.settings.get('SITE_PARAMS_PATH'), 'r') as rh:
+            site_params = json.load(rh)
+
+        self.target_forums = {site['target_forums'] for site in site_params
+                              if site['name'] == self.name}
+        bbs_table = ''.join([site['bbs_table']for site in site_params
+                             if site['name'] == self.name])
+        if not bbs_table:
+            raise ValueError(
+                f'no `bbs_table` for {self.name} in the site params JSON file'
+            )
+
         yield scrapy.Request(bbs_table, self.parse_forum_list)
 
     def parse_forum_list(self, response):
@@ -34,8 +45,7 @@ class A2chSpider(scrapy.spiders.Spider):
 
         for url in response.css('b ~ a::attr(href)').getall():
             # Only scrape the forums in TARGET_FORUMS
-            target_forums = self.settings.get('TARGET_FORUMS')
-            if forum_id_from_url(url) in target_forums:
+            if forum_id_from_url(url) in self.target_forums:
                 yield scrapy.Request(url, self.parse_forum)
 
     def parse_forum(self, response):

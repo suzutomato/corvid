@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import json
 
 import scrapy
 
@@ -18,7 +19,18 @@ class A5chSpider(scrapy.spiders.Spider):
     allowed_domains = ['5ch.net']
 
     def start_requests(self):
-        bbs_table = 'https://menu.5ch.net/bbstable.html'
+        with open(self.settings.get('SITE_PARAMS_PATH'), 'r') as rh:
+            site_params = json.load(rh)
+
+        self.target_forums = {site['target_forums'] for site in site_params
+                              if site['name'] == self.name}
+        bbs_table = ''.join([site['bbs_table']for site in site_params
+                             if site['name'] == self.name])
+        if not bbs_table:
+            raise ValueError(
+                f'no `bbs_table` for {self.name} in the site params JSON file'
+            )
+
         yield scrapy.Request(bbs_table, self.parse_forum_list)
 
     def parse_forum_list(self, response):

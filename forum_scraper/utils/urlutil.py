@@ -2,7 +2,6 @@
 import json
 import logging
 import os
-from pathlib import Path
 import re
 from urllib.parse import urlparse
 
@@ -12,14 +11,8 @@ from corvid.utils.urlutil import get_sld_from_url
 logger = logging.getLogger(__file__)
 
 # Prepare domain dict with regex.
-base_dir = Path(os.environ['SCRAPER_CONFIG_DIR'])
-domains_json = base_dir / 'domains.json'
-
-if not domains_json.exists():
-    raise FileNotFoundError(f'`domains.json` doesn\'t exist in {base_dir}')
-
-with domains_json.open() as rh:
-    DOMAINS = json.load(rh)
+with open(os.environ['SITE_PARAMS_PATH']) as rh:
+    SITE_PARAMS = json.load(rh)
 
 
 def is_forum_url(url: str) -> bool:
@@ -41,8 +34,8 @@ def is_comment_url(url: str) -> bool:
         raise TypeError
 
     # Is always a relative URL
-    for domain_info in DOMAINS:
-        m = re.match(domain_info['comment_pat'], url)
+    for site_info in SITE_PARAMS:
+        m = re.match(site_info['comment_pat'], url)
         if m:
             return m
 
@@ -52,9 +45,9 @@ def is_comment_url(url: str) -> bool:
 def parse_url(url: str, key: str):
     parsed = urlparse(url)
 
-    for domain_info in DOMAINS:
-        m = re.match(domain_info[key], parsed.path)
-        if domain_info['domain'] in parsed.netloc and m:
+    for site_info in SITE_PARAMS:
+        m = re.match(site_info[key], parsed.path)
+        if site_info['domain'] in parsed.netloc and m:
             return m
 
     return None
