@@ -29,7 +29,7 @@ def generate_settings(base_dir, base_settings, start_time):
     settings['BLOG_TEMPLATE'] = '{blog}.csv'
 
     settings['LOG_LEVEL'] = 'WARNING'
-    # settings['LOG_FILE'] = str(daily_dir/'log.txt')
+    settings['LOG_FILE'] = str(daily_dir/'log.txt')
 
     return settings
 
@@ -53,7 +53,7 @@ if __name__ == '__main__':
     start_time = args.start_time
 
     # Set BASE_DIR environment variable for utils.urlutil
-    os.environ['SCRAPER_CONFIG_DIR'] = str(base_dir/'config')
+    os.environ['SCRAPER_CONFIG_DIR'] = str(base_dir/'corvid_config')
 
     # Retrieve the settings from `settings.py` file
     os.environ['SCRAPY_SETTINGS_MODULE'] = 'blog_scraper.settings'

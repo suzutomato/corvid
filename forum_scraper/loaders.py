@@ -6,7 +6,7 @@
 # https://doc.scrapy.org/en/latest/topics/loaders.html
 
 from scrapy.loader import ItemLoader
-from scrapy.loader.processors import (
+from itemloaders.processors import (
     Compose,
     MapCompose,
     Identity,

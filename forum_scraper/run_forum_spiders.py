@@ -24,7 +24,7 @@ def generate_settings(site_name, base_dir, base_settings, start_time):
     if not daily_dir.exists():
         daily_dir.mkdir()
 
-    target_forums_path = base_dir / 'target_forums.pickle'
+    target_forums_path = base_dir / 'corvid_config' / 'target_forums.pickle'
     if not target_forums_path.exists():
         raise FileNotFoundError(
             f'`target_forums.pickle` doesn\'t exist in {base_dir}'
@@ -45,8 +45,8 @@ def generate_settings(site_name, base_dir, base_settings, start_time):
     settings['TOPIC_METADATA_TEMPLATE'] = '{topic_id}_metadata.json'
     settings['TOPIC_CONTENTS_TEMPLATE'] = '{topic_id}_contents.csv'
 
-    # settings['LOG_LEVEL'] = 'WARNING'
-    # settings['LOG_FILE'] = str(daily_dir/'log.txt')
+    settings['LOG_LEVEL'] = 'WARNING'
+    settings['LOG_FILE'] = str(daily_dir/'log.txt')
 
     return settings
 
@@ -72,7 +72,7 @@ if __name__ == '__main__':
     site = args.site
 
     # Set BASE_DIR environment variable for utils.urlutil
-    os.environ['SCRAPER_CONFIG_DIR'] = str(base_dir/'config')
+    os.environ['SCRAPER_CONFIG_DIR'] = str(base_dir/'corvid_config')
 
     from forum_scraper.spiders.a2ch import A2chSpider
     from forum_scraper.spiders.a5ch import A5chSpider
