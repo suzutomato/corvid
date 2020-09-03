@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
+import json
 import os
 from pathlib import Path
-import pickle
 import re
 from typing import Optional
 from urllib.parse import urlparse
@@ -18,7 +18,8 @@ class BlogInfo:
                  first_page: int = 1,
                  art_regex: Optional[str] = None,
                  cmt_regex: Optional[str] = None,
-                 src_regex: Optional[str] = None):
+                 src_regex: Optional[str] = None,
+                 **kwargs):
         self.url = url
         self.name = name
         self.pp_sel = pp_sel
@@ -43,8 +44,8 @@ class BlogsSpider(scrapy.Spider):
     def start_requests(self):
         config_dir = Path(os.environ['SCRAPER_CONFIG_DIR'])
 
-        with (config_dir/'blogs.pickle').open('rb') as rh:
-            blog_params = self.get_blog_info(pickle.load(rh))
+        with (config_dir/'blogs.json').open('r') as rh:
+            blog_params = self.get_blog_info(json.load(rh))
 
         for blog_param in blog_params:
             yield scrapy.Request(blog_param.url, self.parse,
